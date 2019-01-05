@@ -1,0 +1,34 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 2013
+VisualStudioVersion = 12.0.31101.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SqlCustomers", "SqlCustomers\SqlCustomers.csproj", "{3FDD7E53-5BBE-4B4A-BAFC-007AE881A167}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SqlCustomersBLL", "SqlCustomersBLL\SqlCustomersBLL.csproj", "{7BD659A6-FE3A-4609-A122-E279C1B93C1B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SqlCustomersDAL", "SqlCustomersDAL\SqlCustomersDAL.csproj", "{7A95946F-92B8-4E65-8A9C-8C1924A7260C}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{3FDD7E53-5BBE-4B4A-BAFC-007AE881A167}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3FDD7E53-5BBE-4B4A-BAFC-007AE881A167}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3FDD7E53-5BBE-4B4A-BAFC-007AE881A167}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3FDD7E53-5BBE-4B4A-BAFC-007AE881A167}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7BD659A6-FE3A-4609-A122-E279C1B93C1B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7BD659A6-FE3A-4609-A122-E279C1B93C1B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7BD659A6-FE3A-4609-A122-E279C1B93C1B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7BD659A6-FE3A-4609-A122-E279C1B93C1B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7A95946F-92B8-4E65-8A9C-8C1924A7260C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7A95946F-92B8-4E65-8A9C-8C1924A7260C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7A95946F-92B8-4E65-8A9C-8C1924A7260C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7A95946F-92B8-4E65-8A9C-8C1924A7260C}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
