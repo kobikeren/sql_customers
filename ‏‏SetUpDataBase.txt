@@ -1,0 +1,807 @@
+STEP 1 : execute the sql script, in Microsoft SQL Server
+STEP 2 : in App.config file, insert the connection string
+
+
+---------------------------------------------------------------------------------------------
+------------------------------------------ SQL --------------------------------------------
+---------------------------------------------------------------------------------------------
+
+create database dbCustomers
+go
+
+use dbCustomers
+go
+
+if SCHEMA_ID(N'dbo') IS NULL
+	EXECUTE(N'CREATE SCHEMA [dbo]');
+go
+
+create table tblCustomers
+(
+	Id int primary key identity,
+	CustomerName nvarchar(50) NOT NULL,
+	SumOfPurchases int NOT NULL,
+	City nvarchar(50) NOT NULL,
+	Telephone nvarchar(50) NOT NULL,
+	AccountManager nvarchar(50) NOT NULL,
+	Category nvarchar(50) NOT NULL
+)
+go
+
+create table tblCustomersAudit
+(
+	Id int primary key identity,
+	CustomerId int,
+	AuditData nvarchar(1000),
+	Operation nvarchar(50)
+)
+go
+
+create function fn_GetChangesMessageForTextField
+	(@OldValue nvarchar(50), @NewValue nvarchar(50),
+	@Counter int, @FieldName nvarchar(50))
+Returns nvarchar(200)
+As
+Begin
+	Declare @Result nvarchar(200)
+
+	set @Result = ''
+
+	if (@OldValue <> @NewValue)
+	Begin
+		set @Result = @Result + ' ' + CAST(@Counter As nvarchar) +
+			') ' + @FieldName + ' from ' + @OldValue + ' to ' + @NewValue
+	End
+
+	Return @Result
+End
+go
+
+create function fn_GetChangesMessageForNumericField
+	(@OldValue int, @NewValue int,
+	@Counter int, @FieldName nvarchar(50))
+Returns nvarchar(200)
+As
+Begin
+	Declare @Result nvarchar(200)
+
+	set @Result = ''
+
+	if (@OldValue <> @NewValue)
+	Begin
+		set @Result = @Result + ' ' + CAST(@Counter As nvarchar) +
+			') ' + @FieldName + ' from ' + CAST(@OldValue As nvarchar) + 
+			' to ' + CAST(@NewValue As nvarchar)
+	End
+
+	Return @Result
+End
+go
+
+create Trigger tr_tblCustomers_ForInsert
+on tblCustomers
+For Insert
+As
+Begin
+	Declare @Id int
+
+	select @Id = Id from inserted
+
+	insert into tblCustomersAudit values (@Id,
+		'New customer with Id = ' + CAST(@Id As nvarchar) + ' is added at ' +
+		CAST(GETDATE() As nvarchar),
+		'INSERT')
+End
+go
+
+create Trigger tr_tblCustomers_ForDelete
+on tblCustomers
+For Delete
+As
+Begin
+	Declare @Id int
+
+	select * into #TempTableForDelete from deleted
+
+	while (Exists(select Id from #TempTableForDelete))
+	Begin
+		select top 1 @Id = Id
+		from #TempTableForDelete order by Id
+
+		insert into tblCustomersAudit values (@Id,
+			'An existing customer with Id = ' + CAST(@Id As nvarchar) + ' is deleted at ' +
+			CAST(GETDATE() As nvarchar),
+			'DELETE')
+
+		delete from #TempTableForDelete where Id = @Id
+	End
+End
+go
+
+create Trigger tr_tblCustomers_ForUpdate
+on tblCustomers
+For Update
+As
+Begin
+	Declare @Id int
+
+	Declare @OldCustomerName nvarchar(50), @NewCustomerName nvarchar(50)
+	Declare @OldSumOfPurchases int, @NewSumOfPurchases int
+	Declare @OldCity nvarchar(50), @NewCity nvarchar(50)
+	Declare @OldTelephone nvarchar(50), @NewTelephone nvarchar(50)
+	Declare @OldAccountManager nvarchar(50), @NewAccountManager nvarchar(50)
+	Declare @OldCategory nvarchar(50), @NewCategory nvarchar(50)
+
+	Declare @AuditString nvarchar(1000)
+	Declare @Counter int
+
+	select * into #TempTableForUpdate from inserted
+
+	while (Exists(select Id from #TempTableForUpdate))
+	Begin
+		set @AuditString = ''
+		set @Counter = 1
+
+		select top 1 @Id = Id,
+			@NewCustomerName = CustomerName,
+			@NewSumOfPurchases = SumOfPurchases,
+			@NewCity = City,
+			@NewTelephone = Telephone,
+			@NewAccountManager = AccountManager,
+			@NewCategory = Category
+		from #TempTableForUpdate order by Id
+
+		select
+			@OldCustomerName = CustomerName,
+			@OldSumOfPurchases = SumOfPurchases,
+			@OldCity = City,
+			@OldTelephone = Telephone,
+			@OldAccountManager = AccountManager,
+			@OldCategory = Category
+		from deleted where Id = @Id
+
+		set @AuditString = 'An existing customer with Id = ' + CAST(@Id As nvarchar) +
+			' changed:'
+
+		set @AuditString = @AuditString + dbo.fn_GetChangesMessageForTextField(
+			@OldCustomerName, @NewCustomerName, @Counter, 'CustomerName')
+		if (@OldCustomerName <> @NewCustomerName)
+			set @Counter = @Counter + 1
+
+		set @AuditString = @AuditString + dbo.fn_GetChangesMessageForNumericField(
+			@OldSumOfPurchases, @NewSumOfPurchases, @Counter, 'SumOfPurchases')
+		if (@OldSumOfPurchases <> @NewSumOfPurchases)
+			set @Counter = @Counter + 1
+
+		set @AuditString = @AuditString + dbo.fn_GetChangesMessageForTextField(
+			@OldCity, @NewCity, @Counter, 'City')
+		if (@OldCity <> @NewCity)
+			set @Counter = @Counter + 1
+
+		set @AuditString = @AuditString + dbo.fn_GetChangesMessageForTextField(
+			@OldTelephone, @NewTelephone, @Counter, 'Telephone')
+		if (@OldTelephone <> @NewTelephone)
+			set @Counter = @Counter + 1
+
+		set @AuditString = @AuditString + dbo.fn_GetChangesMessageForTextField(
+			@OldAccountManager, @NewAccountManager, @Counter, 'AccountManager')
+		if (@OldAccountManager <> @NewAccountManager)
+			set @Counter = @Counter + 1
+
+		set @AuditString = @AuditString + dbo.fn_GetChangesMessageForTextField(
+			@OldCategory, @NewCategory, @Counter, 'Category')
+		if (@OldCategory <> @NewCategory)
+			set @Counter = @Counter + 1
+
+		set @AuditString = @AuditString + ' at ' + CAST(GETDATE() As nvarchar)
+
+		insert into tblCustomersAudit values (@Id,
+			@AuditString,
+			'UPDATE')
+
+		delete from #TempTableForUpdate where Id = @Id
+	End
+End
+go
+
+--start: script to insert 515 test records
+Declare @Counter int
+set @Counter = 1
+
+Declare @NumberOfRecords int
+set @NumberOfRecords = 515
+
+-- *** STAGE 1 of 3 ***
+--CustomerName: Column 2 (STAGE 1 of 3)
+Declare @CustomerNameToInsert nvarchar(50)
+
+--SumOfPurchases: Column 3 (STAGE 1 of 3)
+Declare @RandomSumOfPurchases int
+Declare @SumOfPurchasesToInsert int
+Declare @LowerLimitForSumOfPurchases int
+Declare @UpperLimitForSumOfPurchases int
+set @LowerLimitForSumOfPurchases = 1
+set @UpperLimitForSumOfPurchases = 125
+
+--City: Column 4 (STAGE 1 of 3)
+Declare @RandomCity int
+Declare @CityToInsert nvarchar(50)
+Declare @LowerLimitForCity int
+Declare @UpperLimitForCity int
+set @LowerLimitForCity = 1
+set @UpperLimitForCity = 15
+
+--Telephone: Column 5 (STAGE 1 of 3)
+Declare @TelephoneToInsert nvarchar(50)
+
+Declare @RandomTelephone1 int
+Declare @Telephone1ToInsert nvarchar(50)
+Declare @LowerLimitForTelephone1 int
+Declare @UpperLimitForTelephone1 int
+set @LowerLimitForTelephone1 = 1
+set @UpperLimitForTelephone1 = 100
+
+Declare @RandomTelephone2 int
+Declare @Telephone2ToInsert nvarchar(50)
+Declare @LowerLimitForTelephone2 int
+Declare @UpperLimitForTelephone2 int
+set @LowerLimitForTelephone2 = 1
+set @UpperLimitForTelephone2 = 1000
+
+Declare @RandomTelephone3 int
+Declare @Telephone3ToInsert nvarchar(50)
+Declare @LowerLimitForTelephone3 int
+Declare @UpperLimitForTelephone3 int
+set @LowerLimitForTelephone3 = 1
+set @UpperLimitForTelephone3 = 1000
+
+--AccountManager: Column 6 (STAGE 1 of 3)
+Declare @RandomAccountManager int
+Declare @AccountManagerToInsert nvarchar(50)
+Declare @LowerLimitForAccountManager int
+Declare @UpperLimitForAccountManager int
+set @LowerLimitForAccountManager = 1
+set @UpperLimitForAccountManager = 45
+
+--Category: Column 7 (STAGE 1 of 3)
+Declare @RandomCategory int
+Declare @CategoryToInsert nvarchar(50)
+Declare @LowerLimitForCategory int
+Declare @UpperLimitForCategory int
+set @LowerLimitForCategory = 1
+set @UpperLimitForCategory = 30
+
+--the following loop will insert a test record in each iteration
+while (@Counter <= @NumberOfRecords)
+Begin
+	-- *** STAGE 2 of 3 ***
+
+	--CustomerName: Column 2 (STAGE 2 of 3)
+	--Nothing to do here
+
+	--SumOfPurchases: Column 3 (STAGE 2 of 3)
+	select @RandomSumOfPurchases = ROUND(((@UpperLimitForSumOfPurchases -
+		@LowerLimitForSumOfPurchases) * RAND() + 
+		@LowerLimitForSumOfPurchases), 0)
+
+	--City: Column 4 (STAGE 2 of 3)
+	select @RandomCity = ROUND(((@UpperLimitForCity -
+		@LowerLimitForCity) * RAND() + 
+		@LowerLimitForCity), 0)
+
+	--Telephone: Column 5 (STAGE 2 of 3)
+	select @RandomTelephone1 = ROUND(((@UpperLimitForTelephone1 -
+		@LowerLimitForTelephone1) * RAND() + 
+		@LowerLimitForTelephone1), 0)
+
+	select @RandomTelephone2 = ROUND(((@UpperLimitForTelephone2 -
+		@LowerLimitForTelephone2) * RAND() + 
+		@LowerLimitForTelephone2), 0)
+
+	select @RandomTelephone3 = ROUND(((@UpperLimitForTelephone3 -
+		@LowerLimitForTelephone3) * RAND() + 
+		@LowerLimitForTelephone3), 0)
+
+	--AccountManager: Column 6 (STAGE 2 of 3)
+	select @RandomAccountManager = ROUND(((@UpperLimitForAccountManager -
+		@LowerLimitForAccountManager) * RAND() + 
+		@LowerLimitForAccountManager), 0)
+
+	--Category: Column 7 (STAGE 2 of 3)
+	select @RandomCategory = ROUND(((@UpperLimitForCategory -
+		@LowerLimitForCategory) * RAND() + 
+		@LowerLimitForCategory), 0)
+
+	-- *** STAGE 3 of 3 ***
+	
+	--CustomerName: Column 2 (STAGE 3 of 3)
+	set @CustomerNameToInsert = 'Customer name - ' + CAST(@Counter As nvarchar(20))
+	
+	--SumOfPurchases: Column 3 (STAGE 3 of 3)
+	set @SumOfPurchasesToInsert = @RandomSumOfPurchases * 1000
+	
+	--City: Column 4 (STAGE 3 of 3)
+	set @CityToInsert = 'City - ' + CAST(@RandomCity AS nvarchar(20))
+
+	--Telephone: Column 5 (STAGE 3 of 3)
+	set @RandomTelephone1 = @RandomTelephone1 - 1
+	if (@RandomTelephone1 = 0)
+		set @Telephone1ToInsert = '00'
+	if (@RandomTelephone1 >= 1 and @RandomTelephone1 <= 9)
+		set @Telephone1ToInsert = '0' + CAST(@RandomTelephone1 As nvarchar(20))
+	if (@RandomTelephone1 >= 10)
+		set @Telephone1ToInsert = CAST(@RandomTelephone1 As nvarchar(20))
+
+	set @RandomTelephone2 = @RandomTelephone2 - 1
+	if (@RandomTelephone2 = 0)
+		set @Telephone2ToInsert = '000'
+	if (@RandomTelephone2 >= 1 and @RandomTelephone2 <= 9)
+		set @Telephone2ToInsert = '00' + CAST(@RandomTelephone2 As nvarchar(20))
+	if (@RandomTelephone2 >= 10 and @RandomTelephone2 <= 99)
+		set @Telephone2ToInsert = '0' + CAST(@RandomTelephone2 As nvarchar(20))
+	if (@RandomTelephone2 >= 100)
+		set @Telephone2ToInsert = CAST(@RandomTelephone2 As nvarchar(20))
+
+	set @RandomTelephone3 = @RandomTelephone3 - 1
+	if (@RandomTelephone3 = 0)
+		set @Telephone3ToInsert = '000'
+	if (@RandomTelephone3 >= 1 and @RandomTelephone3 <= 9)
+		set @Telephone3ToInsert = '00' + CAST(@RandomTelephone3 As nvarchar(20))
+	if (@RandomTelephone3 >= 10 and @RandomTelephone3 <= 99)
+		set @Telephone3ToInsert = '0' + CAST(@RandomTelephone3 As nvarchar(20))
+	if (@RandomTelephone3 >= 100)
+		set @Telephone3ToInsert = CAST(@RandomTelephone3 As nvarchar(20))
+
+	set @TelephoneToInsert = @Telephone1ToInsert + '-' + @Telephone2ToInsert + '-' +
+		@Telephone3ToInsert
+
+	--AccountManager: Column 6 (STAGE 3 of 3)
+	set @AccountManagerToInsert = 'Account Manager - ' + CAST(@RandomAccountManager As nvarchar(20))
+	
+	--Category: Column 7 (STAGE 3 of 3)
+	set @CategoryToInsert = 'Category - ' + CAST(@RandomCategory As nvarchar(20))
+
+	insert into tblCustomers values 
+	(@CustomerNameToInsert,
+	@SumOfPurchasesToInsert,
+	@CityToInsert,
+	@TelephoneToInsert,
+	@AccountManagerToInsert,
+	@CategoryToInsert)
+
+	set @Counter = @Counter + 1
+End
+go
+--end: script to insert 515 test records
+
+create procedure spGetCustomerById
+@Id int
+As
+Begin
+	select * from tblCustomers
+	where Id = @Id
+End
+go
+
+create procedure spInsertCustomer
+@CustomerName nvarchar(50),
+@SumOfPurchases int,
+@City nvarchar(50),
+@Telephone nvarchar(50),
+@AccountManager nvarchar(50),
+@Category nvarchar(50),
+@NewId int out
+As
+Begin
+	insert into tblCustomers values
+	(@CustomerName, @SumOfPurchases, @City,
+	 @Telephone, @AccountManager, @Category)
+
+	 select @NewId = SCOPE_IDENTITY()
+End
+go
+
+create procedure spUpdateCustomer
+@Id int,
+@CustomerName nvarchar(50),
+@SumOfPurchases int,
+@City nvarchar(50),
+@Telephone nvarchar(50),
+@AccountManager nvarchar(50),
+@Category nvarchar(50)
+As
+Begin
+	update tblCustomers set CustomerName = @CustomerName, SumOfPurchases = @SumOfPurchases,
+	City = @City, Telephone = @Telephone, AccountManager = @AccountManager,
+	Category = @Category where Id = @Id
+End
+go
+
+create procedure spDeleteCustomer
+@Id int
+As
+Begin
+	delete from tblCustomers
+	where Id = @Id
+End
+go
+
+create procedure spGetCustomers
+@CustomerName nvarchar(50) = NULL,
+@City nvarchar(50) = NULL,
+@AccountManager nvarchar(50) = NULL,
+@Category nvarchar(50) = NULL,
+@SortExpression nvarchar(50),
+@SortDirection nvarchar(50),
+@PageNumber int,
+@PageSize int,
+@CurrentPage int out,
+@NumberOfPages int out,
+@CanMoveFivePagesBackward nvarchar(50) out,
+@CanMoveOnePageBackward nvarchar(50) out,
+@CanMoveOnePageForward nvarchar(50) out,
+@CanMoveFivePagesForward nvarchar(50) out
+As
+Begin
+	--convert paging criteria from being expressed in terms of pages
+	--to being expressed in terms of rows
+	Declare @StartRowNumber int
+	Declare @EndRowNumber int
+	set @StartRowNumber = ((@PageNumber - 1) * @PageSize) + 1;
+	set @EndRowNumber = @PageNumber * @PageSize;
+
+	--declare table variable to hold result set, filtered by search criteria
+	Declare @TableVariableResult Table
+	(
+		Id int,
+		CustomerName nvarchar(50),
+		SumOfPurchases int,
+		City nvarchar(50),
+		Telephone nvarchar(50),
+		AccountManager nvarchar(50),
+		Category nvarchar(50)
+	)
+	--step 1: filter by search criteria
+	insert into @TableVariableResult
+	select * from tblCustomers
+	where (CustomerName = @CustomerName or @CustomerName IS NULL) and
+		  (City = @City or @City IS NULL) and
+		  (AccountManager = @AccountManager or @AccountManager IS NULL) and
+		  (Category = @Category or @Category IS NULL)
+
+	--first out parameter
+	set @CurrentPage = @PageNumber
+	Declare @NumberOfRows int
+	Declare @RemainderOfRows int
+	select @NumberOfRows = COUNT(*) from @TableVariableResult
+	set @RemainderOfRows = @NumberOfRows % @PageSize
+	set @NumberOfRows = @NumberOfRows - @RemainderOfRows
+	
+	--second out parameter
+	set @NumberOfPages = @NumberOfRows / @PageSize
+	if (@RemainderOfRows <> 0)
+		set @NumberOfPages = @NumberOfPages + 1
+
+	--third out parameter
+	if ((@CurrentPage - 5) < 1)
+		set @CanMoveFivePagesBackward = 'no'
+	else
+		set @CanMoveFivePagesBackward = 'yes'
+
+	--fourth out parameter
+	if ((@CurrentPage - 1) < 1)
+		set @CanMoveOnePageBackward = 'no'
+	else
+		set @CanMoveOnePageBackward = 'yes'
+
+	--fifth out parameter
+	if ((@CurrentPage + 1) > @NumberOfPages)
+		set @CanMoveOnePageForward = 'no'
+	else
+		set @CanMoveOnePageForward = 'yes'
+
+	--sixth out parameter
+	if ((@CurrentPage + 5) > @NumberOfPages)
+		set @CanMoveFivePagesForward = 'no'
+	else
+		set @CanMoveFivePagesForward = 'yes';
+
+	--step 2: sort the records and add RowNumber column (for filtering by
+	--paging creteria, in next step)
+	With ResultCTE As
+	(
+		select ROW_NUMBER() over (order by
+
+			case when @SortExpression = 'Id' and @SortDirection = 'ASC'
+				then Id end asc,
+			case when @SortExpression = 'Id' and @SortDirection = 'DESC'
+				then Id end desc,
+
+			case when @SortExpression = 'CustomerName' and @SortDirection = 'ASC'
+				then CustomerName end asc,
+			case when @SortExpression = 'CustomerName' and @SortDirection = 'DESC'
+				then CustomerName end desc,
+
+			case when @SortExpression = 'SumOfPurchases' and @SortDirection = 'ASC'
+				then SumOfPurchases end asc,
+			case when @SortExpression = 'SumOfPurchases' and @SortDirection = 'DESC'
+				then SumOfPurchases end desc,
+
+			case when @SortExpression = 'City' and @SortDirection = 'ASC'
+				then City end asc,
+			case when @SortExpression = 'City' and @SortDirection = 'DESC'
+				then City end desc,
+
+			case when @SortExpression = 'Telephone' and @SortDirection = 'ASC'
+				then Telephone end asc,
+			case when @SortExpression = 'Telephone' and @SortDirection = 'DESC'
+				then Telephone end desc,
+
+			case when @SortExpression = 'AccountManager' and @SortDirection = 'ASC'
+				then AccountManager end asc,
+			case when @SortExpression = 'AccountManager' and @SortDirection = 'DESC'
+				then AccountManager end desc,
+
+			case when @SortExpression = 'Category' and @SortDirection = 'ASC'
+				then Category end asc,
+			case when @SortExpression = 'Category' and @SortDirection = 'DESC'
+				then Category end desc
+
+		) As RowNumber, Id, CustomerName, SumOfPurchases, City,
+			Telephone, AccountManager, Category
+		from @TableVariableResult
+	)
+	--step 3: filter by paging creteria
+	select Id, CustomerName, SumOfPurchases, City, Telephone, AccountManager, Category
+	from ResultCTE
+	where RowNumber >= @StartRowNumber and RowNumber <= @EndRowNumber
+End
+go
+
+create procedure spGetCustomersBySumOfPurchasesLevel
+@SumOfPurchasesLevel int,
+@SortExpression nvarchar(50),
+@SortDirection nvarchar(50),
+@PageNumber int,
+@PageSize int,
+@SumOfPurchasesForLevel int out,
+@CurrentPage int out,
+@NumberOfPages int out,
+@CanMoveFivePagesBackward nvarchar(50) out,
+@CanMoveOnePageBackward nvarchar(50) out,
+@CanMoveOnePageForward nvarchar(50) out,
+@CanMoveFivePagesForward nvarchar(50) out
+As
+Begin
+	--find SumOfPurchases coresponding to the specified level
+	With ResultForLevel As
+	(
+		select SumOfPurchases,
+			DENSE_RANK() over (order by SumOfPurchases desc) As DenseRank
+		from tblCustomers
+	)
+	--first out parameter
+	select top 1 @SumOfPurchasesForLevel = SumOfPurchases
+	from ResultForLevel
+	where DenseRank = @SumOfPurchasesLevel
+
+	--convert paging criteria from being expressed in terms of pages
+	--to being expressed in terms of rows
+	Declare @StartRowNumber int
+	Declare @EndRowNumber int
+	set @StartRowNumber = ((@PageNumber - 1) * @PageSize) + 1;
+	set @EndRowNumber = @PageNumber * @PageSize;
+
+	--declare table variable to hold result set, filtered by search criteria
+	Declare @TableVariableResult Table
+	(
+		Id int,
+		CustomerName nvarchar(50),
+		SumOfPurchases int,
+		City nvarchar(50),
+		Telephone nvarchar(50),
+		AccountManager nvarchar(50),
+		Category nvarchar(50)
+	)
+	--step 1: filter by search criteria
+	insert into @TableVariableResult
+	select * from tblCustomers
+	where SumOfPurchases = @SumOfPurchasesForLevel
+
+	--second out parameter
+	set @CurrentPage = @PageNumber
+	Declare @NumberOfRows int
+	Declare @RemainderOfRows int
+	select @NumberOfRows = COUNT(*) from @TableVariableResult
+	set @RemainderOfRows = @NumberOfRows % @PageSize
+	set @NumberOfRows = @NumberOfRows - @RemainderOfRows
+	
+	--third out parameter
+	set @NumberOfPages = @NumberOfRows / @PageSize
+	if (@RemainderOfRows <> 0)
+		set @NumberOfPages = @NumberOfPages + 1
+
+	--fourth out parameter
+	if ((@CurrentPage - 5) < 1)
+		set @CanMoveFivePagesBackward = 'no'
+	else
+		set @CanMoveFivePagesBackward = 'yes'
+
+	--fifth out parameter
+	if ((@CurrentPage - 1) < 1)
+		set @CanMoveOnePageBackward = 'no'
+	else
+		set @CanMoveOnePageBackward = 'yes'
+
+	--sixth out parameter
+	if ((@CurrentPage + 1) > @NumberOfPages)
+		set @CanMoveOnePageForward = 'no'
+	else
+		set @CanMoveOnePageForward = 'yes'
+
+	--seventh out parameter
+	if ((@CurrentPage + 5) > @NumberOfPages)
+		set @CanMoveFivePagesForward = 'no'
+	else
+		set @CanMoveFivePagesForward = 'yes';
+
+	--step 2: sort the records and add RowNumber column (for filtering by
+	--paging creteria, in next step)
+	With ResultCTE As
+	(
+		select ROW_NUMBER() over (order by
+
+			case when @SortExpression = 'Id' and @SortDirection = 'ASC'
+				then Id end asc,
+			case when @SortExpression = 'Id' and @SortDirection = 'DESC'
+				then Id end desc,
+
+			case when @SortExpression = 'CustomerName' and @SortDirection = 'ASC'
+				then CustomerName end asc,
+			case when @SortExpression = 'CustomerName' and @SortDirection = 'DESC'
+				then CustomerName end desc,
+
+			case when @SortExpression = 'SumOfPurchases' and @SortDirection = 'ASC'
+				then SumOfPurchases end asc,
+			case when @SortExpression = 'SumOfPurchases' and @SortDirection = 'DESC'
+				then SumOfPurchases end desc,
+
+			case when @SortExpression = 'City' and @SortDirection = 'ASC'
+				then City end asc,
+			case when @SortExpression = 'City' and @SortDirection = 'DESC'
+				then City end desc,
+
+			case when @SortExpression = 'Telephone' and @SortDirection = 'ASC'
+				then Telephone end asc,
+			case when @SortExpression = 'Telephone' and @SortDirection = 'DESC'
+				then Telephone end desc,
+
+			case when @SortExpression = 'AccountManager' and @SortDirection = 'ASC'
+				then AccountManager end asc,
+			case when @SortExpression = 'AccountManager' and @SortDirection = 'DESC'
+				then AccountManager end desc,
+
+			case when @SortExpression = 'Category' and @SortDirection = 'ASC'
+				then Category end asc,
+			case when @SortExpression = 'Category' and @SortDirection = 'DESC'
+				then Category end desc
+
+		) As RowNumber, Id, CustomerName, SumOfPurchases, City,
+			Telephone, AccountManager, Category
+		from @TableVariableResult
+	)
+	--step 3: filter by paging creteria
+	select Id, CustomerName, SumOfPurchases, City, Telephone, AccountManager, Category
+	from ResultCTE
+	where RowNumber >= @StartRowNumber and RowNumber <= @EndRowNumber
+End
+go
+
+create procedure spGetCustomersAuditData
+@CustomerId int = NULL,
+@Operation nvarchar(50) = NULL,
+@SortExpression nvarchar(50),
+@SortDirection nvarchar(50),
+@PageNumber int,
+@PageSize int,
+@CurrentPage int out,
+@NumberOfPages int out,
+@CanMoveFivePagesBackward nvarchar(50) out,
+@CanMoveOnePageBackward nvarchar(50) out,
+@CanMoveOnePageForward nvarchar(50) out,
+@CanMoveFivePagesForward nvarchar(50) out
+As
+Begin
+	--convert paging criteria from being expressed in terms of pages
+	--to being expressed in terms of rows
+	Declare @StartRowNumber int
+	Declare @EndRowNumber int
+	set @StartRowNumber = ((@PageNumber - 1) * @PageSize) + 1;
+	set @EndRowNumber = @PageNumber * @PageSize;
+
+	--declare table variable to hold result set, filtered by search criteria
+	Declare @TableVariableResult Table
+	(
+		Id int,
+		CustomerId int,
+		AuditData nvarchar(1000),
+		Operation nvarchar(50)
+	)
+	--step 1: filter by search criteria
+	insert into @TableVariableResult
+	select * from tblCustomersAudit
+	where (CustomerId = @CustomerId or @CustomerId IS NULL) and
+		  (Operation = @Operation or @Operation IS NULL)
+		  
+	--first out parameter
+	set @CurrentPage = @PageNumber
+	Declare @NumberOfRows int
+	Declare @RemainderOfRows int
+	select @NumberOfRows = COUNT(*) from @TableVariableResult
+	set @RemainderOfRows = @NumberOfRows % @PageSize
+	set @NumberOfRows = @NumberOfRows - @RemainderOfRows
+	
+	--second out parameter
+	set @NumberOfPages = @NumberOfRows / @PageSize
+	if (@RemainderOfRows <> 0)
+		set @NumberOfPages = @NumberOfPages + 1
+
+	--third out parameter
+	if ((@CurrentPage - 5) < 1)
+		set @CanMoveFivePagesBackward = 'no'
+	else
+		set @CanMoveFivePagesBackward = 'yes'
+
+	--fourth out parameter
+	if ((@CurrentPage - 1) < 1)
+		set @CanMoveOnePageBackward = 'no'
+	else
+		set @CanMoveOnePageBackward = 'yes'
+
+	--fifth out parameter
+	if ((@CurrentPage + 1) > @NumberOfPages)
+		set @CanMoveOnePageForward = 'no'
+	else
+		set @CanMoveOnePageForward = 'yes'
+
+	--sixth out parameter
+	if ((@CurrentPage + 5) > @NumberOfPages)
+		set @CanMoveFivePagesForward = 'no'
+	else
+		set @CanMoveFivePagesForward = 'yes';
+
+	--step 2: sort the records and add RowNumber column (for filtering by
+	--paging creteria, in next step)
+	With ResultCTE As
+	(
+		select ROW_NUMBER() over (order by
+
+			case when @SortExpression = 'Id' and @SortDirection = 'ASC'
+				then Id end asc,
+			case when @SortExpression = 'Id' and @SortDirection = 'DESC'
+				then Id end desc,
+
+			case when @SortExpression = 'CustomerId' and @SortDirection = 'ASC'
+				then CustomerId end asc,
+			case when @SortExpression = 'CustomerId' and @SortDirection = 'DESC'
+				then CustomerId end desc,
+
+			case when @SortExpression = 'AuditData' and @SortDirection = 'ASC'
+				then AuditData end asc,
+			case when @SortExpression = 'AuditData' and @SortDirection = 'DESC'
+				then AuditData end desc,
+
+			case when @SortExpression = 'Operation' and @SortDirection = 'ASC'
+				then Operation end asc,
+			case when @SortExpression = 'Operation' and @SortDirection = 'DESC'
+				then Operation end desc
+
+		) As RowNumber, Id, CustomerId, AuditData, Operation
+		from @TableVariableResult
+	)
+	--step 3: filter by paging creteria
+	select Id, CustomerId, AuditData, Operation
+	from ResultCTE
+	where RowNumber >= @StartRowNumber and RowNumber <= @EndRowNumber
+End
+go
