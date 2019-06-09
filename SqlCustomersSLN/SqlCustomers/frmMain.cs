@@ -7,6 +7,11 @@ using System.Windows.Forms;
 
 namespace SqlCustomers
 {
+    //*******************************************************************
+    //****************** Created by kobi keren **************************
+    //******************     on 09/06/2019     **************************
+    //*******************************************************************
+
     public partial class frmMain : Form
     {
         //create a business-logic manager
